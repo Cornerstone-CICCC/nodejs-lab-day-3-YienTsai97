@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <div class="constainer">
+      <h1>Chat room</h1>
+      <button class="btnRoom" room="Room1">Room 1</button>
+      <button class="btnRoom" room="Room2">Room 2</button>
+      <button class="btnRoom" room="Room3">Room 3</button>
+
+      <form action="" class="message-form">
+        <input
+          type="text"
+          id="usernameInput"
+          placeholder="Enter your Name"
+          required
+        />
+        <input
+          type="text"
+          id="messageInput"
+          placeholder="Enter your Message"
+          required
+        />
+        <button type="submit">Send</button>
+      </form>
+
+      <h2>Messages</h2>
+      <ul class="messages"></ul>
+    </div>
+
+    <script type="module">
+      import { io } from "https://cdn.socket.io/4.8.1/socket.io.esm.min.js";
+      const socket = io("http://localhost:3000");
+
+      const roomBtns = document.querySelectorAll(".btnRoom");
+      const messageForm = document.querySelector(".message-form");
+      const usernameInput = messageForm.querySelector("#usernameInput");
+      const messageInput = messageForm.querySelector("#messageInput");
+      const messages = document.querySelector(".messages");
+      let currentRoom = "";
+
+      //Room btns
+      roomBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const newRoom = btn.getAttribute("room");
+          const username = usernameInput.value.trim() || "Anonymous";
+
+          if (currentRoom) {
+            socket.emit("leave room", { room: currentRoom, username });
+          }
+
+          currentRoom = newRoom;
+          socket.emit("join room", { room: currentRoom, username });
+
+          messages.innerHTML = "";
+          buildChatList(currentRoom);
+        });
+      });
+
+      //send Message to server
+      messageForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (currentRoom) {
+          socket.emit("sendMessage", {
+            username: usernameInput.value.trim(),
+            message: messageInput.value.trim(),
+            room: currentRoom,
+          });
+        }
+        messageInput.value = "";
+      });
+
+      //Listen new Message from server
+      socket.on("newMessage", (chat) => {
+        if (chat.room === currentRoom || !chat.room) {
+          const li = document.createElement("li");
+          li.innerHTML = `<strong>${chat.username}</strong>: ${chat.message}`;
+          messages.append(li);
+        }
+      });
+
+      //Load ChatList from Database
+      const fetchChatsByRoom = async (selectedroom) => {
+        try {
+          const res = await fetch(
+            `http://localhost:3000/api/chat/room/${selectedroom}`,
+            {
+              method: "GET",
+            }
+          );
+          if (!res.ok) {
+            throw new Error(`Error: ${res.status}`);
+          }
+          const data = await res.json();
+          return data;
+        } catch (err) {
+          console.error("Fetch error:", err);
+        }
+      };
+
+      const buildChatList = async () => {
+        messages.innerHTML = "";
+        const chatList = await fetchChatsByRoom(currentRoom);
+
+        chatList.forEach((list) => {
+          const li = document.createElement("li");
+          li.innerHTML = `<strong>${list.username}</strong>: ${list.message}`;
+          messages.prepend(li);
+        });
+      };
+    </script>
+  </body>
+</html>
